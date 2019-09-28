@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <script>
+        if (location.protocol !== "https:") {
+        location.protocol = "https:";
+    }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.css">
+    <script src="face-api.js"></script>
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+    <meta charset="UTF-8">
+    <title>AttendanceCam</title>
+</head>
+
+<body>
+    <div>
+        <button onclick="captureButton();">Web Capture</button>
+    </div>
+    <div style="position: relative" class="margin">
+        <img id="inputImg" src="" style="max-width: 800px;" />
+        <canvas id="overlay" />
+        <video style="display:block" id="hiddenVideo"></video>
+    </div>
+    <!-- image_selection_control -->
+    <div class="row">
+        <label>Upload Image:</label>
+        <div>
+            <input id="queryImgUploadInput" type="file" class="bold" onchange="uploadQueryImage()" accept=".jpg, .jpeg, .png">
+        </div>
+    </div>
+    <script>
+    console.time('everything');
+    let faceMatcher;
+    let faces = [];
+
+
+    async function createFaceMatcher() {
+        console.timeLog('everything')
+        if (faceMatcher) return faceMatcher;
+        faces.sort();
+        console.log(faces)
+        labeledFaceDescriptors = [];
+        let descriptors = []
+        let currentName = "";
+        for (let i = 0; i < faces.length; i++) {
+            if (currentName !== faces[i].split('.')[0]) {
+                descriptors = [];
+                currentName = faces[i].split('.')[0];
+            }
+            let img = await faceapi.fetchImage('faces/' + faces[i])
+            console.log('faces/' + faces[i])
+            descriptors.push(await faceapi.computeFaceDescriptor(img));
+            if (faces.length > (i + 1)) {
+                if (faces[i].split('.')[0] == faces[i + 1].split('.')[0]) {
+                    console.log(faces[i]);
+                    continue;
+                }
+            }
+
+            labeledFaceDescriptors.push(new faceapi.LabeledFaceDescriptors(
+                currentName,
+                descriptors));
+        }
+        console.timeLog('everything')
+
+        const maxDescriptorDistance = 0.6
+        faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, maxDescriptorDistance)
+        console.log(faceMatcher);
+        let j = faceMatcher.toJSON();
+        //faceMatcher.fromJSON(j);
+
+        return faceMatcher;
+
+    }
+
+    async function updateResults() {
+
+        console.timeLog('everything')
+        let response = await fetch('php/faces.php');
+        faces = await response.json();
+        console.timeLog('everything')
+        await faceapi.loadFaceRecognitionModel('/weights')
+        // faceMatcher = await createFaceMatcher();
+        if (!faceMatcher) {
+            console.log('faceMatcher not yet loaded');
+            faceMatcher = await createFaceMatcher();
+
+            //return
+        } else {
+            console.info('faceMatcher is loaded');
+        }
+        console.log(faceMatcher);
+
+    }
+    updateResults();
+    </script>
+</body>
+
+</html>
