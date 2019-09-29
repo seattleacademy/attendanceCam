@@ -3,6 +3,7 @@
 
 <head>
     <script>
+        //Needed if webcam is used
         if (location.protocol !== "https:") {
         location.protocol = "https:";
     }
@@ -15,20 +16,19 @@
 </head>
 
 <body>
-    <div>
-        <button onclick="captureButton();">Web Capture</button>
+    <div class="row">
+        <div class="col">
+            <button onclick="captureButton();">Web Cam</button>
+        </div>
+        <!-- image_selection_control -->
+        <div class="col">
+            <label>Upload Image:</label> <input id="queryImgUploadInput" type="file" class="bold" onchange="uploadQueryImage()" accept=".jpg, .jpeg, .png">
+        </div>
     </div>
     <div style="position: relative" class="margin">
-        <img id="inputImg" src="" style="max-width: 800px;" />
-        <canvas id="overlay" />
+        <img id="inputImg" src="bbt1.jpg" style="max-width: 800px;" />
+        <canvas style="position: absolute;top: 0;left: 0;" id="overlay" />
         <video style="display:block" id="hiddenVideo"></video>
-    </div>
-    <!-- image_selection_control -->
-    <div class="row">
-        <label>Upload Image:</label>
-        <div>
-            <input id="queryImgUploadInput" type="file" class="bold" onchange="uploadQueryImage()" accept=".jpg, .jpeg, .png">
-        </div>
     </div>
     <script>
     console.time('everything');
@@ -37,10 +37,8 @@
 
 
     async function createFaceMatcher() {
-        console.timeLog('everything')
         if (faceMatcher) return faceMatcher;
         faces.sort();
-        console.log(faces)
         labeledFaceDescriptors = [];
         let descriptors = []
         let currentName = "";
@@ -50,51 +48,155 @@
                 currentName = faces[i].split('.')[0];
             }
             let img = await faceapi.fetchImage('faces/' + faces[i])
-            console.log('faces/' + faces[i])
+            //console.log('faces/' + faces[i])
             descriptors.push(await faceapi.computeFaceDescriptor(img));
             if (faces.length > (i + 1)) {
                 if (faces[i].split('.')[0] == faces[i + 1].split('.')[0]) {
-                    console.log(faces[i]);
                     continue;
                 }
             }
-
             labeledFaceDescriptors.push(new faceapi.LabeledFaceDescriptors(
                 currentName,
                 descriptors));
         }
-        console.timeLog('everything')
 
-        const maxDescriptorDistance = 0.6
+        const maxDescriptorDistance = 0.5
         faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, maxDescriptorDistance)
-        console.log(faceMatcher);
-        let j = faceMatcher.toJSON();
-        //faceMatcher.fromJSON(j);
-
         return faceMatcher;
+    }
+    async function loadModels() {
+        a = faceapi.loadFaceRecognitionModel('/weights')
+        b = faceapi.nets.tinyFaceDetector.load("/weights");
+        c = faceapi.nets.faceLandmark68TinyNet.load("/weights");
+        // d = faceapi.nets.faceLandmark68Net.load("/weights");
+        await Promise.all([a, b, c]).then(function(out) {
+            console.timeLog('everything')
+            return out;
+        })
+
+        // await faceapi.loadFaceRecognitionModel('/weights')
+        // await faceapi.nets.tinyFaceDetector.load("/weights");
+        // await faceapi.nets.faceLandmark68TinyNet.load("/weights");
+
+
+    }
+
+    function makeFaceForm(person, faceCanvas) {
+        str + '<form method="post" accept-charset="utf-8" name="form1" action="php/addFace.php">';
+        str += '<textarea style="display:none" name="hidden_data">';
+        str += faceCanvas.toDataURL("image/jpeg", 0.7);
+        str += '</textarea>';
+        //str += '<textarea name="person">';
+        str += '<input type="text" name="person" value="'
+        str += faceCanvas.label;
+        str += '">';
+        //str += '</textarea>';
+        str += '<input type="submit" value="Submit">'
+        str += '</form>';
+        return str;
+    }
+
+    function drawFaceRecognitionResults(results) {
+        const canvas = $('#overlay').get(0)
+        const inputImgEl = $('#inputImg').get(0)
+
+        faceapi.matchDimensions(canvas, inputImgEl)
+
+        const resizedResults = faceapi.resizeResults(results, inputImgEl)
+        $('.faceNames').remove();
+
+        resizedResults.forEach(({ detection, descriptor, faceCanvas, bestMatch }) => {
+            let person = bestMatch.label;
+
+            testButton = $('<input/>').attr({
+                class: 'faceNames',
+                type: 'button',
+                value: person,
+                style: 'position:absolute; top:' + detection.box.top + 'px;left:' + detection.box.left + 'px; zindex:2'
+            });
+              var btn = document.createElement("BUTTON");
+            btn.innerHTML = person;
+            btn.className = 'faceNames';
+            btn.dataset.person = person;
+            btn.dataset.canvas =  faceCanvas[0].toDataURL("image/jpeg", 0.7);
+            btn.style = 'position:absolute; top:' + detection.box.top + 'px;left:' + detection.box.left + 'px; zindex:2';
+           btn.addEventListener("click", personClick);;
+
+            $('body').append(btn);
+
+
+            function personClick(e){
+               console.log('button clicked', e);
+                var newPerson = prompt("Please enter person's name:", e.target.dataset.person);
+                if (newPerson == null || newPerson == "" || newPerson == "unknown") {
+                } else {
+                    e.target.dataset.person = newPerson;
+                    e.target.innerHTML = newPerson;
+                    $.post( "php/addFace.php", { person: newPerson, hidden_data: e.target.dataset.canvas } )
+                    .done(function(data){
+                        console.log(data);
+                        updateResults()
+                    });
+                }
+            }
+
+            // str = '<form method="post" accept-charset="utf-8" name="form1" action="php/addFace.php" ';
+            // str += 'style = "position:absolute; top:' + detection.box.top + 'px;left:' + detection.box.left + 'px; zindex:2"';
+            // str+= '>';
+            // console.log(str);
+            // str += '<textarea style="display:none" name="hidden_data">';
+            // str += faceCanvas[0].toDataURL("image/jpeg", 0.7);
+            // str += '</textarea>';
+            // //str += '<textarea name="person">';
+            // str += '<input type="text" name="person" value="'
+            // str += person;
+            // str += '">';
+            // //str += '</textarea>';
+            // str += '<input type="submit" value="Submit">'
+            // str += '</form>';
+            //     $('body').append(str);
+            //     $(document).on("click", ".faceNames", function(e) {
+            //         console.log('button clicked',e);
+            //     });
+        })
+
+
 
     }
 
     async function updateResults() {
-
-        console.timeLog('everything')
         let response = await fetch('php/faces.php');
         faces = await response.json();
-        console.timeLog('everything')
-        await faceapi.loadFaceRecognitionModel('/weights')
-        // faceMatcher = await createFaceMatcher();
-        if (!faceMatcher) {
-            console.log('faceMatcher not yet loaded');
-            faceMatcher = await createFaceMatcher();
 
-            //return
-        } else {
-            console.info('faceMatcher is loaded');
+        faceMatcher = await createFaceMatcher();
+
+        const inputImgEl = $('#inputImg').get(0)
+
+        let results = await faceapi
+            .detectAllFaces(inputImgEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: .4 }))
+            .withFaceLandmarks(true)
+            .withFaceDescriptors()
+
+        for (var i = 0; i < results.length; i++) {
+            results[i].bestMatch = faceMatcher.findBestMatch(results[i].descriptor)
+            results[i].faceCanvas = await faceapi.extractFaces(inputImgEl, [
+                results[i].detection.box
+            ])
         }
-        console.log(faceMatcher);
 
+        drawFaceRecognitionResults(results);
+        console.timeLog('everything')
     }
-    updateResults();
+
+    async function uploadQueryImage(e) {
+        const imgFile = $('#queryImgUploadInput').get(0).files[0]
+        const img = await faceapi.bufferToImage(imgFile)
+        $('#inputImg').get(0).src = img.src
+        updateResults()
+    }
+    // updateResults();
+
+    loadModels().then(updateResults);
     </script>
 </body>
 
