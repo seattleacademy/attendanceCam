@@ -2,12 +2,10 @@
 <html lang="en">
 
 <head>
-    </script>
     <meta charset="UTF-8">
     <title>AttendanceCam</title>
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link rel="stylesheet" href="css/materialize.min.css">
-    <script src="face-api.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.css">
+    <script src="js/face-api.min.js"></script>
     <script src="js/jquery-3.4.1.min.js"></script>
     <script src="js/materialize.min.js"></script>
 </head>
@@ -197,7 +195,10 @@
             hiddenVideo.pause();
             //hiddenVideo.src="";
         });
-        //Must be https to use webcam
+        if (location.protocol !== "https:") {
+            location.protocol = "https:";
+        }
+        // Needed if webcam is used
         if (location.protocol !== "https:") {
             location.protocol = "https:";
         }
@@ -205,6 +206,9 @@
             hiddenVideo.srcObject = stream;
             hiddenVideo.play();
         });
+
+
+
 
     }
 
