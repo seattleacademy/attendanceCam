@@ -2,18 +2,14 @@
 <html lang="en">
 
 <head>
-    <script>
-        //Needed if webcam is used
-        if (location.protocol !== "https:") {
-        location.protocol = "https:";
-    }
     </script>
     <meta charset="UTF-8">
     <title>AttendanceCam</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.css">
-    <script src="face-api.js"></script>
-    <script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="css/materialize.min.css">
+    <script src="face-api.min.js"></script>
+    <script src="js/jquery-3.4.1.min.js"></script>
+    <script src="js/materialize.min.js"></script>
 </head>
 
 <body>
@@ -201,13 +197,14 @@
             hiddenVideo.pause();
             //hiddenVideo.src="";
         });
+        //Must be https to use webcam
+        if (location.protocol !== "https:") {
+            location.protocol = "https:";
+        }
         navigator.mediaDevices.getUserMedia({ video: true }).then(function(stream) {
             hiddenVideo.srcObject = stream;
             hiddenVideo.play();
         });
-
-
-
 
     }
 
