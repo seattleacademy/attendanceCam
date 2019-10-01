@@ -65,6 +65,10 @@
 
         const maxDescriptorDistance = 0.5
         faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, maxDescriptorDistance)
+           $.post("php/writeFaceJSON.php", { payload: JSON.stringify(labeledFaceDescriptors) })
+            .done(function(data) {
+                console.log(data);
+            });
         M.toast({ html: 'Face Matcher made' })
         return faceMatcher;
     }
