@@ -2,6 +2,12 @@
 <html lang="en">
 
 <head>
+    <script>
+        // Needed if webcam is used
+    if (location.protocol !== "https:") {
+    location.protocol = "https:";
+    }
+</script>
     <meta charset="UTF-8">
     <title>AttendanceCam</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.css">
@@ -11,35 +17,99 @@
 </head>
 
 <body>
-    <div class="row">
-        <div class="col">
-            <button onclick="captureButton();">Web Cam</button>
+    <div class="container">
+        <div class="row">
+            <div class="col">
+                <button onclick="captureButton();">Web Cam</button>
+            </div>
+            <!-- image_selection_control -->
+            <div class="col">
+                <label>Upload Image:</label> <input id="queryImgUploadInput" type="file" class="bold" onchange="uploadQueryImage()" accept=".jpg, .jpeg, .png">
+            </div>
+            <div class="col range-field">
+                <input type="range" id="scoreThreshold" min=".1" max=".95" step=".05" value=".5" />
+            </div>
+            <div class="col range-field">
+                <input type="range" id="inputSize" min="32" max="608" step="32" value="512" />
+            </div>
+            <!-- Switch -->
+            <div class="switch">
+                <label>SSD<input type="checkbox"><span class="lever"></span>Tiny</label>
+            </div>
+            </label>
         </div>
-        <!-- image_selection_control -->
-        <div class="col">
-            <label>Upload Image:</label> <input id="queryImgUploadInput" type="file" class="bold" onchange="uploadQueryImage()" accept=".jpg, .jpeg, .png">
+        <div id="imagediv" style="position: relative" class="margin">
+            <img id="inputImg" src="bbt1.jpg" style="max-width: 800px;" />
+            <canvas style="position: absolute;top: 0;left: 0;" id="overlay" />
         </div>
-        <div class="col range-field">
-            <input type="range" id="scoreThreshold" min=".1" max=".95" step=".05" value=".5" />
-        </div>
-        <div class="col range-field">
-            <input type="range" id="inputSize" min="32" max="608" step="32" value="512" />
-        </div>
-        </form>
+        <video id="hiddenVideo"></video>
     </div>
-    <div style="position: relative" class="margin">
-        <img id="inputImg" src="bbt1.jpg" style="max-width: 800px;" />
-        <canvas style="position: absolute;top: 0;left: 0;" id="overlay" />
-    </div>
-    <video id="hiddenVideo"></video>
     <script>
+    let tiny = true;
     console.time('everything');
     let faceMatcher;
     let faces = [];
+    imageDescriptors = [];
 
+    function addImageDescriptor(person, image, descriptor) {
+        let entry = {};
+        entry.person = person;
+        entry.image = image;
+        entry.descriptor = descriptor;
 
+        imageDescriptors.push(entry);
+        console.dir(imageDescriptors);
+
+        $.post("php/writeFaceJSON.php", { payload: JSON.stringify(imageDescriptors) })
+            .done(function(data) {
+                // console.log(data);
+            });
+    }
     async function createFaceMatcher() {
-        if (faceMatcher) return faceMatcher;
+        // if (faceMatcher) return faceMatcher;
+        let response = await fetch('php/readFaceJSON.php');
+        imageDescriptors = await response.json();
+        imageDescriptors.sort();
+
+        labeledFaceDescriptors = [];
+        let descriptors = []
+        var currentName = "";
+        for (let i = 0; i < imageDescriptors.length; i++) {
+            if (imageDescriptors[i].person !== currentName) {
+                descriptors = [];
+                currentName = imageDescriptors[i].person;
+            }
+            if(imageDescriptors[i].descriptor){
+            descriptors.push(new Float32Array(Object.values(imageDescriptors[i].descriptor)));
+        }
+        else{
+            console.error('null descriptor')
+        }
+
+
+            if (imageDescriptors.length > (i + 1)) {
+                if (imageDescriptors[i].person == imageDescriptors[i + 1].person) {
+                    continue;
+                }
+            }
+            //console.error(currentName, descriptors);
+            if (currentName) {
+                labeledFaceDescriptors.push(new faceapi.LabeledFaceDescriptors(
+                    currentName,
+                    descriptors));
+            }
+        }
+
+        const maxDescriptorDistance = 0.7
+        faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, maxDescriptorDistance)
+        //console.dir(faceMatcher);
+
+        M.toast({ html: 'Face Matcher made' })
+        return faceMatcher;
+    }
+
+    async function oldcreateFaceMatcher() {
+        // if (faceMatcher) return faceMatcher;
         let response = await fetch('php/faces.php');
         faces = await response.json();
         faces.sort();
@@ -52,32 +122,37 @@
                 currentName = faces[i].split('.')[0];
             }
             let img = await faceapi.fetchImage('faces/' + faces[i])
-            descriptors.push(await faceapi.computeFaceDescriptor(img));
+            descriptor = await faceapi.computeFaceDescriptor(img);
+            descriptors.push(descriptor);
+            addImageDescriptor(faces[i].split('.')[0], faces[i], descriptor);
             if (faces.length > (i + 1)) {
                 if (faces[i].split('.')[0] == faces[i + 1].split('.')[0]) {
                     continue;
                 }
             }
+            //console.error(descriptors);
+
             labeledFaceDescriptors.push(new faceapi.LabeledFaceDescriptors(
                 currentName,
                 descriptors));
         }
 
-        const maxDescriptorDistance = 0.5
+        const maxDescriptorDistance = 0.7
         faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, maxDescriptorDistance)
-           $.post("php/writeFaceJSON.php", { payload: JSON.stringify(labeledFaceDescriptors) })
-            .done(function(data) {
-                console.log(data);
-            });
+        //console.dir(faceMatcher);
+
         M.toast({ html: 'Face Matcher made' })
         return faceMatcher;
     }
     async function loadModels() {
         a = faceapi.loadFaceRecognitionModel('/weights')
-        b = faceapi.nets.ssdMobilenetv1.load("/weights");
-        // b = faceapi.nets.tinyFaceDetector.load("/weights");
-        //c = faceapi.nets.faceLandmark68TinyNet.load("/weights");
-        c = faceapi.nets.faceLandmark68Net.load("/weights");
+        if (tiny) {
+            b = faceapi.nets.tinyFaceDetector.load("/weights");
+            c = faceapi.nets.faceLandmark68TinyNet.load("/weights");
+        } else {
+            b = faceapi.nets.ssdMobilenetv1.load("/weights");
+            c = faceapi.nets.faceLandmark68Net.load("/weights");
+        }
         await Promise.all([a, b, c]).then(function(out) {
             console.timeLog('everything')
             return out;
@@ -115,23 +190,27 @@
             btn.className = 'faceNames';
             btn.dataset.person = person;
             btn.dataset.canvas = faceCanvas[0].toDataURL("image/jpeg", .95); //.92 is default
+            btn.dataset.descriptor = descriptor;
             //btn.dataset.canvas = faceCanvas[0].toDataURL(); //Save as uncompressed png
             btn.style = 'position:absolute; top:' + detection.box.top + 'px;left:' + detection.box.left + 'px; zindex:2';
             btn.addEventListener("click", personClick);;
 
-            $('body').append(btn);
+            $('#imagediv').append(btn);
 
 
             function personClick(e) {
-                console.log('button clicked', e);
                 var newPerson = prompt("Please enter person's name:", e.target.dataset.person);
                 if (newPerson == null || newPerson == "" || newPerson == "unknown") {} else {
                     e.target.dataset.person = newPerson;
                     e.target.innerHTML = newPerson;
-                    $.post("php/addFace.php", { person: newPerson, img: e.target.dataset.canvas })
+                    $.post("php/addFace.php", { person: newPerson, img: e.target.dataset.canvas, descriptor: e.target.dataset.descriptor })
                         .done(function(data) {
-                            console.log(data);
-                            faceMatcher = null;
+                            descriptor = {};
+                            d = e.target.dataset.descriptor.split(',');
+                            for(var i = 0; i < d.length; i++){
+                               descriptor[i.toString()] = Number(d[i]);
+                            }
+                            addImageDescriptor(newPerson, data, descriptor);
                             updateResults()
                         });
                 }
@@ -139,8 +218,6 @@
 
         })
     }
-
-
 
     async function updateResults() {
         console.time('updateResults')
@@ -151,14 +228,18 @@
         const inputImgEl = $('#inputImg').get(0)
         let scoreThreshold = $('#scoreThreshold').val();
         let inputSize = $('#inputSize').val();
-
-        let results = await faceapi
-            //.detectAllFaces(inputImgEl, new faceapi.TinyFaceDetectorOptions({ inputSize: inputSize * 1, scoreThreshold: scoreThreshold * 1 }))
-            .detectAllFaces(inputImgEl, new faceapi.SsdMobilenetv1Options({ minConfidence: scoreThreshold * 1 }))
-            //.withFaceLandmarks(true)
-            .withFaceLandmarks()
-            .withFaceDescriptors()
-
+        let results = null;
+        if (tiny) {
+            results = await faceapi
+                .detectAllFaces(inputImgEl, new faceapi.TinyFaceDetectorOptions({ inputSize: inputSize * 1, scoreThreshold: scoreThreshold * 1 }))
+                .withFaceLandmarks(true)
+                .withFaceDescriptors()
+        } else {
+            results = await faceapi
+                .detectAllFaces(inputImgEl, new faceapi.SsdMobilenetv1Options({ minConfidence: scoreThreshold * 1 }))
+                .withFaceLandmarks()
+                .withFaceDescriptors()
+        }
         for (var i = 0; i < results.length; i++) {
             results[i].bestMatch = faceMatcher.findBestMatch(results[i].descriptor)
             results[i].faceCanvas = await faceapi.extractFaces(inputImgEl, [
@@ -174,45 +255,32 @@
     }
 
     function captureButton(e) {
-        console.log('captureButton', e);
         var hiddenVideo = document.createElement("video");
-        hiddenVideo.addEventListener("loadeddata", function(e) {
-            console.log(e);
+        hiddenVideo.addEventListener("loadeddata", function handler() {
             var canvas = document.createElement("canvas");
-            //canvas.style = "display: none";
-            // Creates a canvas
-            document.body.appendChild(canvas);
 
-            // Sets the width and height
+            document.body.appendChild(canvas);
             canvas.width = hiddenVideo.videoWidth;
             canvas.height = hiddenVideo.videoHeight;
-
-            // Draws the image on the canvas
             canvas.getContext("2d").drawImage(hiddenVideo, 0, 0, canvas.width, canvas.height);
 
-            // Gets the data URL
-
             $('#inputImg').get(0).src = canvas.toDataURL();
-            //hiddenVideo.stop();
             updateResults()
             document.body.removeChild(canvas);
             hiddenVideo.pause();
-            //hiddenVideo.src="";
+            this.removeEventListener('loadeddata', handler);
         });
-        if (location.protocol !== "https:") {
-            location.protocol = "https:";
-        }
-        // Needed if webcam is used
-        if (location.protocol !== "https:") {
-            location.protocol = "https:";
-        }
-        navigator.mediaDevices.getUserMedia({ video: true }).then(function(stream) {
+        // use for external webcam
+        // let constraints =  {
+        //           deviceId: { exact: '818942870642ad537a39f9ab4ea273749bc3f6c85a7c71a3203d51ec185103c7'  } 
+        //         };
+
+        let constraints = true; //Use defaults
+
+        navigator.mediaDevices.getUserMedia({ video: constraints }).then(function(stream) {
             hiddenVideo.srcObject = stream;
             hiddenVideo.play();
         });
-
-
-
 
     }
 
@@ -237,6 +305,7 @@
     M.toast({ html: 'Loading Models' })
 
     loadModels().then(updateResults);
+    M.AutoInit();
     </script>
 </body>
 
